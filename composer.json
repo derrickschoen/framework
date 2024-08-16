@@ -1,6 +1,7 @@
 {
     "name": "laravel/framework",
     "description": "The Laravel Framework.",
+    "version": "7.81.0",
     "keywords": ["framework", "laravel"],
     "license": "MIT",
     "homepage": "https://laravel.com",
