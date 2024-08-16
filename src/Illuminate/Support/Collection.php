@@ -520,11 +520,11 @@ class Collection implements ArrayAccess, Enumerable
     {
         $first = $this->first();
 
-        if (is_array($first) || is_object($first)) {
-            return implode($glue, $this->pluck($value)->all());
+        if (is_array($first) || (is_object($first) && ! $first instanceof Stringable)) {
+            return implode($glue ?? '', $this->pluck($value)->all());
         }
 
-        return implode($value, $this->items);
+        return implode($value ?? '', $this->items);
     }
 
     /**
@@ -1082,7 +1082,7 @@ class Collection implements ArrayAccess, Enumerable
 
         $callback && is_callable($callback)
             ? uasort($items, $callback)
-            : asort($items, $callback);
+            : asort($items, $callback ?? SORT_REGULAR);
 
         return new static($items);
     }
@@ -1388,4 +1388,5 @@ class Collection implements ArrayAccess, Enumerable
     {
         unset($this->items[$key]);
     }
+
 }

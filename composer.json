@@ -115,7 +115,7 @@
     },
     "extra": {
         "branch-alias": {
-            "dev-master": "7.x-dev"
+            "dev-73081": "7.31.x-dev"
         }
     },
     "suggest": {

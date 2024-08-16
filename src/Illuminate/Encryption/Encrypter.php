@@ -24,6 +24,18 @@ class Encrypter implements EncrypterContract
     protected $cipher;
 
     /**
+     * The supported cipher algorithms and their properties.
+     *
+     * @var array
+     */
+    private static $supportedCiphers = [
+        'aes-128-cbc' => ['size' => 16, 'aead' => false],
+        'aes-256-cbc' => ['size' => 32, 'aead' => false],
+        'aes-128-gcm' => ['size' => 16, 'aead' => true],
+        'aes-256-gcm' => ['size' => 32, 'aead' => true],
+    ];
+
+    /**
      * Create a new encrypter instance.
      *
      * @param  string  $key
@@ -81,26 +93,32 @@ class Encrypter implements EncrypterContract
      */
     public function encrypt($value, $serialize = true)
     {
-        $iv = random_bytes(openssl_cipher_iv_length($this->cipher));
+        $iv = random_bytes(openssl_cipher_iv_length(strtolower($this->cipher)));
 
-        // First we will encrypt the value using OpenSSL. After this is encrypted we
-        // will proceed to calculating a MAC for the encrypted value so that this
-        // value can be verified later as not having been changed by the users.
-        $value = \openssl_encrypt(
-            $serialize ? serialize($value) : $value,
-            $this->cipher, $this->key, 0, $iv
-        );
+        $tag = '';
+
+        $value = self::$supportedCiphers[strtolower($this->cipher)]['aead']
+            ? \openssl_encrypt(
+                $serialize ? serialize($value) : $value,
+                strtolower($this->cipher), $this->key, 0, $iv, $tag
+            )
+            : \openssl_encrypt(
+                $serialize ? serialize($value) : $value,
+                strtolower($this->cipher), $this->key, 0, $iv
+            );
 
         if ($value === false) {
             throw new EncryptException('Could not encrypt the data.');
         }
 
-        // Once we get the encrypted value we'll go ahead and base64_encode the input
-        // vector and create the MAC for the encrypted value so we can then verify
-        // its authenticity. Then, we'll JSON the data into the "payload" array.
-        $mac = $this->hash($iv = base64_encode($iv), $value);
+        $iv = base64_encode($iv);
+        $tag = base64_encode($tag);
 
-        $json = json_encode(compact('iv', 'value', 'mac'), JSON_UNESCAPED_SLASHES);
+        $mac = self::$supportedCiphers[strtolower($this->cipher)]['aead']
+            ? '' // For AEAD-algoritms, the tag / MAC is returned by openssl_encrypt...
+            : $this->hash($iv, $value);
+
+        $json = json_encode(compact('iv', 'value', 'mac', 'tag'), JSON_UNESCAPED_SLASHES);
 
         if (json_last_error() !== JSON_ERROR_NONE) {
             throw new EncryptException('Could not encrypt the data.');
@@ -137,11 +155,17 @@ class Encrypter implements EncrypterContract
 
         $iv = base64_decode($payload['iv']);
 
+        $tag = empty($payload['tag']) ? null : base64_decode($payload['tag']);
+
+        if (self::$supportedCiphers[strtolower($this->cipher)]['aead'] && strlen($tag) !== 16) {
+            throw new DecryptException('Could not decrypt the data.');
+        }
+
         // Here we will decrypt the value. If we are able to successfully decrypt it
         // we will then unserialize it and return it out to the caller. If we are
         // unable to decrypt this value we will throw out an exception message.
         $decrypted = \openssl_decrypt(
-            $payload['value'], $this->cipher, $this->key, 0, $iv
+            $payload['value'], strtolower($this->cipher), $this->key, 0, $iv, $tag ?? ''
         );
 
         if ($decrypted === false) {
